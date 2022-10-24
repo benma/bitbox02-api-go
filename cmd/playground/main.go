@@ -173,6 +173,7 @@ func main() {
 	deviceInfo := func() usb.DeviceInfo {
 		infos, err := usb.EnumerateHid(0, 0)
 		errpanic(err)
+		fmt.Println(len(infos))
 		for _, di := range infos {
 			if di.Serial == "" || di.Product == "" {
 				continue
@@ -181,7 +182,7 @@ func main() {
 				return di
 			}
 		}
-		panic("could no find a bitbox02")
+		panic("could not find a bitbox02")
 
 	}()
 	hidDevice, err := deviceInfo.Open()
@@ -196,17 +197,17 @@ func main() {
 			fmt.Println("Attestation check:", *attestation)
 		}
 	})
-	device.Init()
+	errpanic(device.Init())
 	device.ChannelHashVerify(true)
 
-	rootFingerprint, err := device.RootFingerprint()
-	errpanic(err)
-	fmt.Printf("Root fingerprint: %x\n", rootFingerprint)
+	// rootFingerprint, err := device.RootFingerprint()
+	// errpanic(err)
+	// fmt.Printf("Root fingerprint: %x\n", rootFingerprint)
 
 	info, err := device.DeviceInfo()
 	errpanic(err)
 	fmt.Printf("Device info: %+v", info)
-
+	return
 	//signFromTxID(device, "48e83b2a44c21dab01fc7bad0df1b1d7a59e48af79069454a8320ec6a9d1aefb")
 
 	sig, err := device.ETHSignTypedMessage(
