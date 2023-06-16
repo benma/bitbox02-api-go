@@ -52,9 +52,23 @@ message BTCScriptConfig {
     ScriptType script_type = 4;
   }
 
+  message Descriptor {
+    message Key {
+      // oneof to reserve potential alternatives for key origins (including root fingerprint and
+      // keypath), plain pubkey, etc.
+      oneof key {
+        KeyOriginInfo key_origin_info = 1;
+      }
+    }
+
+    string descriptor = 1;
+    repeated Key keys = 2;
+  }
+
   oneof config {
     SimpleType simple_type = 1;
     Multisig multisig = 2;
+    Descriptor descriptor = 3;
   }
 }
 
@@ -162,6 +176,8 @@ message BTCSignOutputRequest {
 message BTCScriptConfigRegistration {
   BTCCoin coin = 1;
   BTCScriptConfig script_config = 2;
+  // keypath is only used for the multisig registration.
+  // descriptors contain the keypath as part of the KeyOriginInfo.
   repeated uint32 keypath = 3;
 }
 
