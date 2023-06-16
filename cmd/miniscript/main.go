@@ -81,25 +81,20 @@ func getKeypathAccount(num uint32) []uint32 {
 	return []uint32{48 + HARDENED, 0 + HARDENED, num + HARDENED, 3 + HARDENED}
 }
 
-func getBitBox02Keys(device *firmware.Device, coin messages.BTCCoin, ourRootFingerprint []byte, num int) ([]*messages.BTCScriptConfig_Descriptor_Key, []string) {
-	keys := make([]*messages.BTCScriptConfig_Descriptor_Key, num)
-	xpubs := make([]string, num)
-	for i := 0; i < num; i++ {
-		keypathAccount := getKeypathAccount(uint32(i))
-		ourXPub, err := device.BTCXPub(coin, keypathAccount, messages.BTCPubRequest_XPUB, false)
-		xpubs[i] = ourXPub
-		errpanic(err)
-		keys[i] = &messages.BTCScriptConfig_Descriptor_Key{
-			Key: &messages.BTCScriptConfig_Descriptor_Key_KeyOriginInfo{
-				KeyOriginInfo: &messages.KeyOriginInfo{
-					RootFingerprint: ourRootFingerprint,
-					Keypath:         keypathAccount,
-					Xpub:            mustXPub(ourXPub),
-				},
+func getBitBox02Key(device *firmware.Device, coin messages.BTCCoin, ourRootFingerprint []byte, num int) (*messages.BTCScriptConfig_Descriptor_Key, string) {
+	keypathAccount := getKeypathAccount(uint32(num))
+	ourXPub, err := device.BTCXPub(coin, keypathAccount, messages.BTCPubRequest_XPUB, false)
+	errpanic(err)
+	key := &messages.BTCScriptConfig_Descriptor_Key{
+		Key: &messages.BTCScriptConfig_Descriptor_Key_KeyOriginInfo{
+			KeyOriginInfo: &messages.KeyOriginInfo{
+				RootFingerprint: ourRootFingerprint,
+				Keypath:         keypathAccount,
+				Xpub:            mustXPub(ourXPub),
 			},
-		}
+		},
 	}
-	return keys, xpubs
+	return key, ourXPub
 }
 
 type multipath struct {
@@ -130,8 +125,9 @@ func main() {
 
 	}()
 
-	descriptor := "wsh(and_v(v:pk(@0/**),pk(@1/<10;11>/*)))"
-	numKeys := 2
+	//descriptor := "wsh(and_v(v:pk(@0/**),pk(@1/<10;11>/*)))"
+	descriptor := "wsh(andor(pk(@0/**),older(12960),pk(@1/**)))"
+	//descriptor := "wsh(or_b(pk(@0/**),s:pk(@1/**)))"
 	miniscriptNode, err := parseDescriptor(descriptor)
 	errpanic(err)
 
@@ -149,7 +145,18 @@ func main() {
 
 	coin := messages.BTCCoin_TBTC
 
-	keys, xpubs := getBitBox02Keys(device, coin, ourRootFingerprint, numKeys)
+	ourKey, ourXPub := getBitBox02Key(device, coin, ourRootFingerprint, 0)
+	someXPub := "xpub6FKM5xvyFB1JMmUoXPbn1NPXe73TmL3HTZ3u2FfmsPB5szEyFfxHfADEgCSK1wL8c4ViEBzXkDuHGSDhWwmQwRp6DMrusy7UmECYvEg49sH"
+	someKey := &messages.BTCScriptConfig_Descriptor_Key{
+		Key: &messages.BTCScriptConfig_Descriptor_Key_KeyOriginInfo{
+			KeyOriginInfo: &messages.KeyOriginInfo{
+				Xpub: mustXPub(someXPub),
+			},
+		},
+	}
+
+	keys := []*messages.BTCScriptConfig_Descriptor_Key{someKey, ourKey}
+	xpubs := []string{someXPub, ourXPub}
 
 	isChange := false
 	deriveAddressIndex := uint32(0)
@@ -296,8 +303,12 @@ func main() {
 	// errpanic(err)
 
 	allSignatures := make([][][]byte, len(keys))
-	for i := range keys {
-		accountKeypath := getKeypathAccount(uint32(i))
+	for i, key := range keys {
+		keyOriginInfo := key.Key.(*messages.BTCScriptConfig_Descriptor_Key_KeyOriginInfo).KeyOriginInfo
+		if len(keyOriginInfo.RootFingerprint) == 0 {
+			continue
+		}
+		accountKeypath := keyOriginInfo.Keypath
 		mp := multipaths[i]
 		signatures, err := device.BTCSign(
 			coin,
@@ -346,7 +357,7 @@ func main() {
 				},
 				Locktime: withdrawalTransaction.LockTime,
 			},
-			messages.BTCSignInitRequest_DEFAULT,
+			messages.BTCSignInitRequest_SAT,
 		)
 		errpanic(err)
 
@@ -381,6 +392,9 @@ func main() {
 		Sign: func(pubKey []byte) ([]byte, bool) {
 			for i, pk := range pubKeys {
 				if bytes.Equal(pk, pubKey) {
+					if len(allSignatures[i]) == 0 {
+						return nil, false
+					}
 					signature := allSignatures[i][inputIndex]
 					signature = append(signature, byte(txscript.SigHashAll))
 					return signature, true
