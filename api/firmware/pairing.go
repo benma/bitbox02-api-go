@@ -17,6 +17,7 @@ package firmware
 import (
 	"crypto/rand"
 	"encoding/base32"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/BitBoxSwiss/bitbox02-api-go/api/common"
@@ -67,10 +68,12 @@ func (device *Device) pair() error {
 	if err != nil {
 		panic(err)
 	}
+	device.log.Info("LOL send opICanHasHandShaek")
 	responseBytes, err := device.rawQuery([]byte(opICanHasHandShaek))
 	if err != nil {
 		return err
 	}
+	device.log.Info(fmt.Sprintf("LOL response opICanHasHandShaek: %s", hex.EncodeToString(responseBytes)))
 	if string(responseBytes) != responseSuccess {
 		panic(string(responseBytes))
 	}
@@ -79,6 +82,7 @@ func (device *Device) pair() error {
 	if err != nil {
 		panic(err)
 	}
+	device.log.Info(fmt.Sprintf("LOL send: %s", hex.EncodeToString(msg)))
 	responseBytes, err = device.handshakeQuery(msg)
 	if err != nil {
 		return err
