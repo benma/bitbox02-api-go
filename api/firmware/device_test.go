@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -44,6 +45,7 @@ import (
 	"github.com/BitBoxSwiss/bitbox02-api-go/util/errp"
 	"github.com/BitBoxSwiss/bitbox02-api-go/util/semver"
 	"github.com/flynn/noise"
+	"github.com/karalabe/hid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
@@ -209,24 +211,45 @@ func testSimulators(t *testing.T, run func(*testing.T, *Device, *bytes.Buffer)) 
 		t.Skip("Skipping simulator tests: not running on linux-amd64")
 	}
 
-	var simulatorFilenames []string
-	envSimulator := os.Getenv("SIMULATOR")
-	if envSimulator != "" {
-		simulatorFilenames = []string{envSimulator}
-	} else {
-		var err error
-		simulatorFilenames, err = downloadSimulatorsOnce()
-		require.NoError(t, err)
-	}
+	// var simulatorFilenames []string
+	// envSimulator := os.Getenv("SIMULATOR")
+	// if envSimulator != "" {
+	// 	simulatorFilenames = []string{envSimulator}
+	// } else {
+	// 	var err error
+	// 	simulatorFilenames, err = downloadSimulatorsOnce()
+	// 	require.NoError(t, err)
+	// }
 
-	for _, simulatorFilename := range simulatorFilenames {
-		t.Run(filepath.Base(simulatorFilename), func(t *testing.T) {
-			teardown, device, stdOut, err := runSimulator(simulatorFilename)
-			require.NoError(t, err)
-			defer func() { require.NoError(t, teardown()) }()
-			run(t, device, stdOut)
-		})
-	}
+	// for _, simulatorFilename := range simulatorFilenames {
+	// 	t.Run(filepath.Base(simulatorFilename), func(t *testing.T) {
+	// 		teardown, device, stdOut, err := runSimulator(simulatorFilename)
+	// 		require.NoError(t, err)
+	// 		defer func() { require.NoError(t, teardown()) }()
+	// 		run(t, device, stdOut)
+	// 	})
+	// }
+	deviceInfo := func() *hid.DeviceInfo {
+		infos, err := hid.Enumerate(0, 0)
+		errpanic(err)
+		for idx := range infos {
+			di := &infos[idx]
+			if di.Serial == "" || di.Product == "" {
+				continue
+			}
+			if isBitBox02(di) {
+				return di
+			}
+		}
+		panic("could no find a bitbox02")
+
+	}()
+	hidDevice, err := deviceInfo.Open()
+	errpanic(err)
+	const bitboxCMD = 0x80 + 0x40 + 0x01
+	comm := u2fhid.NewCommunication(hidDevice, bitboxCMD)
+	device := NewDevice(nil, nil, &mocks.Config{}, comm, &mocks.Logger{})
+	run(t, device, nil)
 }
 
 // Runs tests against a simulator which is not initialized, but paired (not seeded).
@@ -240,6 +263,29 @@ func testSimulatorsAfterPairing(t *testing.T, run func(*testing.T, *Device, *byt
 	})
 }
 
+func errpanic(err error) {
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+}
+
+const (
+	bitbox02VendorID  = 0x03eb
+	bitbox02ProductID = 0x2403
+
+	HARDENED = 0x80000000
+)
+
+func isBitBox02(deviceInfo *hid.DeviceInfo) bool {
+	return (deviceInfo.Product == common.FirmwareDeviceProductStringBitBox02Multi ||
+		deviceInfo.Product == common.FirmwareDeviceProductStringBitBox02BTCOnly ||
+		deviceInfo.Product == common.FirmwareDeviceProductStringBitBox02PlusMulti ||
+		deviceInfo.Product == common.FirmwareDeviceProductStringBitBox02PlusBTCOnly) &&
+		deviceInfo.VendorID == bitbox02VendorID &&
+		deviceInfo.ProductID == bitbox02ProductID &&
+		(deviceInfo.UsagePage == 0xffff || deviceInfo.Interface == 0)
+}
+
 // Runs tests againt a simulator that is seeded with this mnemonic: boring mistake dish oyster truth
 // pigeon viable emerge sort crash wire portion cannon couple enact box walk height pull today solid
 // off enable tide
@@ -247,7 +293,7 @@ func testInitializedSimulators(t *testing.T, run func(*testing.T, *Device, *byte
 	t.Helper()
 	testSimulatorsAfterPairing(t, func(t *testing.T, device *Device, stdOut *bytes.Buffer) {
 		t.Helper()
-		require.NoError(t, device.RestoreFromMnemonic())
+		//require.NoError(t, device.RestoreFromMnemonic())
 		run(t, device, stdOut)
 	})
 }

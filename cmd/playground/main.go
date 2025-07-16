@@ -214,7 +214,7 @@ func main() {
 	infoJson, err := json.MarshalIndent(info, "", "    ")
 	errpanic(err)
 	fmt.Printf("Device info: %s", infoJson)
-	//signFromTxID(device, "48e83b2a44c21dab01fc7bad0df1b1d7a59e48af79069454a8320ec6a9d1aefb")
+	signFromTxID(device, "48e83b2a44c21dab01fc7bad0df1b1d7a59e48af79069454a8320ec6a9d1aefb")
 
 	sig, err := device.ETHSignEIP1559(
 		1,
